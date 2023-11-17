@@ -1,7 +1,7 @@
 ---
 title: "BDA Project"
 subtitle: "Body fat"
-author: anonymous # <-- hand in anonymously
+author: Veikka Niemi, Anton Aaltio # <-- hand in anonymously
 format:
   html:
     toc: true
