@@ -78,7 +78,7 @@ The bodyfat dataset has underwater weighted densities and circumference measurem
 The data is originally from a study by Penrose et al.(1985)[^1]. They bodyfat percentage is calculated as:
 
 $$
-\text{Body fat-%} = \frac{457}{D} - 414.2,
+\text{Body fat-\%} = \frac{457}{D} - 414.2,
 $$
 
 where $D$ is body density. This formula comes from an article by Brozek et al.(1963)[^2].
