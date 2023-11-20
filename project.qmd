@@ -24,6 +24,8 @@ editor: source
 
 ## Problem description
 
+Body fat percentage = Proportion of fat tissue in body
+
 ## Main modeling idea
 
 - In addition showing some illustrative figure is recommended
@@ -33,6 +35,23 @@ editor: source
 ## Data description
 
 - Provide information where the data was obtained, and if it has been previously used in some online case study and how your analysis differs from the existing analyses
+
+The bodyfat dataset has underwater weighing densities and circumference measurements from 10 body parts measured from 252 men as well as age, weight and height measurements. Using these measurements, the dataset also has body fat percentage estimates for the corresponding individuals.
+
+The data is originally from a study by Penrose et al.(1985)[^1]. They bodyfat percentage is calculated as:
+
+$$
+\text{Body fat-%} = \frac{457}{D} - 414.2,
+$$
+
+where $D$ is body density. This formula comes from an article by Brozek et al.(1963)[^2].
+
+```{r}
+data <- read.csv("bodyfat.csv")
+```
+
+
+The bodyfat dataset was obtained from [Kaggle.com](https://www.kaggle.com/datasets/fedesoriano/body-fat-prediction-dataset/). It is widely available online and can also be downloaded from multiple R packages. Since the dataset is so widely available, many analyses have been done using it. However, most case studies ???.
 
 ## Model description
 
@@ -66,3 +85,9 @@ editor: source
 # Self reflection
 
 - What did the group learn while making the project
+
+# Footnotes/ References
+
+[^1]: Penrose, K.W., Nelson, A.G. and Fisher, A.G., 1985. Generalized body composition prediction equation for men using simple measurement techniques. Medicine & Science in Sports & Exercise, 17(2), p.189.
+
+[^2]: Brožek, J., Grande, F., Anderson, J.T. and Keys, A., 1963. Densitometric analysis of body composition: revision of some quantitative assumptions. Annals of the New York Academy of Sciences, 110(1), pp.113-140.
