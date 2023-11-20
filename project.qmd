@@ -26,6 +26,8 @@ editor: source
 
 Body fat percentage = Proportion of fat tissue in body
 
+Predicting body fat percentage
+
 ## Main modeling idea
 
 - In addition showing some illustrative figure is recommended
@@ -36,7 +38,9 @@ Body fat percentage = Proportion of fat tissue in body
 
 - Provide information where the data was obtained, and if it has been previously used in some online case study and how your analysis differs from the existing analyses
 
-The bodyfat dataset has underwater weighing densities and circumference measurements from 10 body parts measured from 252 men as well as age, weight and height measurements. Using these measurements, the dataset also has body fat percentage estimates for the corresponding individuals.
+(Hyödyllinen paperi: Roger W. Johnson (1996), "Fitting Percentage of Body Fat to Simple Body Measurements", Journal of Statistics Education.)
+
+The bodyfat dataset has underwater weighted densities and circumference measurements from 10 body parts measured from 252 men as well as age, weight and height measurements. Using these measurements, the dataset also has body fat percentage estimates for the corresponding individuals.
 
 The data is originally from a study by Penrose et al.(1985)[^1]. They bodyfat percentage is calculated as:
 
