@@ -1,7 +1,7 @@
 ---
 title: "BDA Project"
 subtitle: "Body fat"
-author: Veikka Niemi, Anton Aaltio # <-- hand in anonymously
+author: Veikka Niemi, Anton Aaltio
 format:
   html:
     toc: true
@@ -19,3 +19,15 @@ editor: source
 ---
 
 # Introduction
+
+# Methods
+
+## Data description
+
+## Model description
+
+# Results
+
+# Discussion
+
+
