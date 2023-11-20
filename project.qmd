@@ -18,6 +18,39 @@ format:
 editor: source
 ---
 
+:::: {.content-hidden when-format="pdf"}
+::: {.callout-warning collapse=false}
+ 
+## Setup
+
+
+*This block will only be visible in your HTML output, but will be hidden when rendering to PDF with quarto for the submission.*
+**Make sure that this does not get displayed in the PDF!**
+
+The following loads several needed packages:
+
+```{r}
+#| label: imports
+library(bayesplot)
+library(cmdstanr)
+library(dplyr)
+library(ggplot2)
+library(ggdist) # for stat_dotsinterval
+library(posterior)
+library(brms)
+# Globally specfiy cmdstan backend for brms
+options(brms.backend="cmdstanr")
+# Tell brms to cache results if possible
+options(brms.file_refit="on_change")
+
+# Set more readable themes with bigger font for plotting packages
+ggplot2::theme_set(theme_minimal(base_size = 14))
+bayesplot::bayesplot_theme_set(theme_minimal(base_size = 14))
+```
+
+:::
+::::
+
 # Introduction
 
 ## Motivation
