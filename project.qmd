@@ -1,5 +1,5 @@
 ---
-title: "BDA Project"
+title: "Bayesian Data Analysis Project"
 subtitle: "Body fat"
 author: Veikka Niemi, Anton Aaltio
 format:
@@ -20,14 +20,49 @@ editor: source
 
 # Introduction
 
+## Motivation
+
+## Problem description
+
+## Main modeling idea
+
+- In addition showing some illustrative figure is recommended
+
 # Methods
 
 ## Data description
 
+- Provide information where the data was obtained, and if it has been previously used in some online case study and how your analysis differs from the existing analyses
+
 ## Model description
 
-# Results
+- At least 2 models
 
-# Discussion
+- Informative or weakly informative priors, and justification of the choice of these priors
 
+# Results ?
 
+- brms, rstanarm, or Stan code
+
+- How the MCMC inference was run, that is, what options were used. A good option is to show the command you ran, and a textual explanation of the choice of options
+
+- Convergence diagnostics and what can be interpreted from them, **for all models**
+  - Rhat, ESS, divergences
+  
+  - What was done to improve the model if the checks indicated misspecification. **For all models**
+  
+- **Bonus:** Predictive performance assessment if applicable (e.g. classification accuracy) and evaluation of practical usefulness of the accuracy, **for all models**
+
+- Sensitivity analysis wrt. prior choices, **for all models**
+
+- Model comparison (LOO-CV)
+
+# Discussion/ Conclusions ?
+
+- Discussion of issues and potential improvements
+
+- Conclusion what was learned from the data analysis
+
+# Self reflection
+
+- What did the group learn while making the project
