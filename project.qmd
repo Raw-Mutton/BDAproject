@@ -55,11 +55,13 @@ bayesplot::bayesplot_theme_set(theme_minimal(base_size = 14))
 
 ## Motivation
 
+Body fat percentage is a quantity that, while seemingly simple, can be difficult to evaluate for the average person. To this end, different methods of measuring the body fat percentage of an individual have been developed. 
+
 ## Problem description
 
-Body fat percentage = Proportion of fat tissue in body
+Body fat percentage is simply the proportion of fat tissue in the body.
+While body fat is essential for any human to function, body fat percentage is generally used as a measure of a person’s fitness level. To calculate the body fat percentage in the dataset, the body has been assumed to consist entirely of lean body tissue and fat tissue as was done by Siri (1956)[^1]. With estimates for the densities of lean body tissue and fat body tissue given by Katch and McArdle (1977)[^2], we then arrive at the Siri equation for body fat percentage. This equation yields the quantity that we want to predict with the explanatory variables in the dataset.
 
-Predicting body fat percentage
 
 ## Main modeling idea
 
@@ -67,39 +69,128 @@ Predicting body fat percentage
 
 # Methods
 
-## Data description
+## Data description and analysis
 
 - Provide information where the data was obtained, and if it has been previously used in some online case study and how your analysis differs from the existing analyses
 
 (Hyödyllinen paperi: Roger W. Johnson (1996), "Fitting Percentage of Body Fat to Simple Body Measurements", Journal of Statistics Education.)
 
-The bodyfat dataset has underwater weighted densities and circumference measurements from 10 body parts measured from 252 men as well as age, weight and height measurements. Using these measurements, the dataset also has body fat percentage estimates for the corresponding individuals.
+The bodyfat dataset has underwater weighted densities and circumference measurements from 10 body parts measured from 252 men as well as age, weight and height measurements. Using these measurements, the dataset also has body fat percentage estimates for the corresponding individuals. The columns of the dataset are "Density", "BodyFat", "Age", "Weight", "Height", "Neck", "Chest", "Adbdomen", "Hip", "Thigh", "Knee", "Ankle", "Biceps", "Forearm" and "Wrist". The column "Weight" contains measurements in lbs, "Age" is in years, "Height" is in inches and all of the other columns are circumferential measurements in cm. According to the Roger W. Johnson (1996), row 42 in the data has the value of height as 29.5 inches with a weight of 205 which is clearly nonsensical and row 182 has a weight of zero. Thus, these rows will be removed from the data used in the modeling.
 
 ```{r}
 data <- read.csv("bodyfat.csv")
+data <- data[-c(42, 182), ]
 head(data, n=3)
 ```
 
-The data is originally from a study by Penrose et al.(1985)[^1]. They body fat percentage is calculated as:
+The data is originally from a study by Penrose et al.(1985)[^3]. The bodyfat dataset was obtained from [Kaggle.com](https://www.kaggle.com/datasets/fedesoriano/body-fat-prediction-dataset/). It is widely available online and can also be downloaded from multiple R packages. Since the dataset is so widely available, many analyses have been done using it. Penrose et al. performed stepwise multiple regression methods to obtain the equation
 
 $$
-\text{Body fat-\%} = \frac{457}{D} - 414.2,
+\text{LBW}=17.298+0.88946\cdot\text{Weight}-0.2783\cdot\text{Age}+0.002617\cdot\text{Age}^2+17.819\cdot\text{Height}-0.6789(\text{Abdomen}-\text{Wrist})
+$$
+where LBW is the lean body weight and the weights are in kg. Through this equation body fat percent can then be calculated. A paired t-test for the difference of the means for the predicted body fat percent and actual body fat percent was performed for a group consisting of 109 men aged 23-74 years and with a body fat percent of 0-47.5%. The difference was shown to be not statistically different from zero at the 0.05 significance level.
+
+Another study was done by Harrell in the book Regression Modeling Strategies where five different OLS linear regression models were fit to the data and the models were compared by the Akaike Information Criterion. The models were `fat ~ rcs(age, 4) + rcs(height, 4) * rcs(abdomen, 4)`, `fat ~ rcs(age, 4) + rcs(log(height), 4) + rcs(log(abdomen)`, `fat ~ rcs(age, 4) + log(height) + log(abdomen)`, `fat ~ age * (log(height) + log(abdomen)` and `fat ~ age + height + abdomen` where `rcs` is used to determine the basis terms for the restricted cubic splines of the data. The third model obtained the lowest AIC and more variables were then added to the model. It was concluded that additional variables were not worthwile to add and the third model yielded a median of the absolute value of residuals as 0.03.
+
+
+
+
+Let $A$ be the proportion of lean body tissue, $B$ the proportion of fat tissue, $a$ the density of lean body tissue (g/cm$^3$), $b$ the density of fat tissue (g/cm$^3$) and $D$ the body density (gm/cm$^3$). Then according to Siri we have the relation
+
+$$
+D = \left(\dfrac{A}{a}+\dfrac{B}{b}\right)^{-1}
 $$
 
-where $D$ is body density. This formula comes from an article by Brozek et al.(1963)[^2].
+Hence,
 
+$$
+B = \dfrac{1}{D}\left(\dfrac{ab}{a-b}\right)-\dfrac{b}{a-b}
+$$
+Similarly as Katch and McArdle, we use the estimates $a=1.10$g/cm$^3$ and $b=0.90$g/cm$^3$ to arrive at Siri's equation
 
-
-
-The bodyfat dataset was obtained from [Kaggle.com](https://www.kaggle.com/datasets/fedesoriano/body-fat-prediction-dataset/). It is widely available online and can also be downloaded from multiple R packages. Since the dataset is so widely available, many analyses have been done using it. However, most case studies ???.
-
+$$
+\text{Body fat %}=\dfrac{495}{D}-450
+$$
 ## Model description
+
+In this project we create three predictive models with `brms` for the body fat percentage. The first model is a linear model where "the body fat percentage "BodyFat" depends on "Age", "Weight", "Chest" and "Neck". Clearly, weight is correlated with body fat percentage as individuals with a higher body fat percent have a higher weight. Age also affects body fat percent as older individuals tend to carry more fat. Additionally, chest and neck are areas of the body where fat visibly accumulates in most obese men. Thus, this set of features seems to be a reasonable model for predicting body fat percent. The second model takes two readily important variables for determining body fat percent, "Abdomen" and "Weight", and creates a group level effect for "Weight" based on "Height". This choice of grouping is due to the fact that weight coupled with the height of an individual yields more information about the body fat percent than height alone. Hence, we have a hierarchical model for body fat percent prediction. The third model incorporates non linearity by including "Weight" squared, "Age" and "Chest" as the features. This model includes three key properties for determining body fat percent and investigates the effect of transforming the "Weight" feature. Notably, all of the models contain an intercept term as well.
+
+Since the original data was published by Brigham Young University in the United States, we can assume that the men in the data are American men. The body fat percentage is assumed to be normally distributed as in general most people have an average body fat percent and large deviations from this are unlikely. The "Age" $A$ can be assumed to vary significantly and be roughly that of a uniform distribution since the age distribution in America, in general, is roughly equal for different age groups. Thus, we will approximate this distribution with a weakly informative prior $A\sim\mathcal{N}(\mu_A,\sigma_{A,est})$. The ages are between 22-81 in the data and hence, without additional information, let us assume that $\mu_A=\dfrac{22+81}{2}=51.5$. Assuming that 99.7% of the ages in the data are within $[\mu_A-3\sigma_A,\mu_A+3\sigma_A]$ we get $\mu_A+3\sigma_A=81\iff\sigma_A=\dfrac{81-51.5}{3}\approx9.8$. To achieve the large standard deviation of $A$, we set $\sigma_{A,est}=10\sigma_A=98$.
+
+"Weight" $\mathcal{W}$ is assumed to also follow a normal distribution since most people have an average weight and large deviations from the average are unlikely. According to the National Center For Health Statistics [4] we have that the mean weight for American men aged 18-79 during 1960-1962 was $\mu_\mathcal{W}=168$ pounds and the standard deviation was $\sigma_\mathcal{W}=27.7$ pounds. We can assume that the weight distribution in 1985 was approximately the same. "Chest" $\mathcal{C}$ can be assumed to be normally distributed since most people have an average chest circumference and the proportion of people with a specific chest circumference decreases as you get further away from the mean. According to Schwartz et al. [5] in 1989, the mean of the chest circumference of 18-30 year old American men was 99cm with a standard deviation of 8.7cm and the mean was 101.6cm with a standard deviation of 6.9cm for 60-85 year old men respectively. Taking the averages of these and converting to inches, we obtain the informative prior $\mathcal{C}\sim\mathcal{N}(\mu_\mathcal{C},\sigma_\mathcal{C})$ where $\mu_\mathcal{C}=39.5$ and $\sigma_\mathcal{C}=3.1$.
+
+For the "Neck" N, we will assume it follows a normal distribution since most people have a neck with an average circumference and large deviations from this are unlikely. Pumill et al. [6] assert that in 2019 the average neck circumference of 5290 African American males was 38cm and had an IQR of 36.0-41.0. The standard deviation can then be approximated to be twice the width of the IQR to be on the conservative side. Hence, $\mu_N=15$ and $\sigma_N=2$ inches in the informative prior for N.
+
+It is reasonable to assume that "Abdomen" $B$ follows a normal distribution as the circumference of the abdomen of most people is near the average and large fluctuations from the mean are improbable. Ford et al. [7] state that in 1999-2012 men aged 20 years and older had an average abdomen circumference of $\mu_B=$99.0cm$=39$in with a 95% confidence interval of 97.9-100.2. Then assuming that half of the observations were men, we have a total of $n=0.5\cdot32816=16408$ observations and the standard deviation satisfies $\overline{B}+\dfrac{1.96\sigma_B}{\sqrt{n}}=100.2\iff\sigma_B=\dfrac{\sqrt{16408}(100.2-99)}{1.96}=52.3$cm$=20.6$in. Again, the prior is based on real data and is hence informative.  
 
 - At least 2 models
 
 - Informative or weakly informative priors, and justification of the choice of these priors
 
 # Results ?
+
+
+```{r}
+priors <- c(
+  prior(normal(180, 20), coef = "Weight"),
+  prior(normal(180, 7), coef = "Height"),
+  prior(normal(83, 3), coef = "Abdomen"),
+  prior(normal(83, 3), coef = "Chest")
+)
+
+f1 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Weight + Height + Abdomen + Chest,
+  # This specifies the dataset
+  data = data,
+  # This specifies the observation model family
+  family = "gaussian",
+  # This passes the priors specified above to brms
+  prior = priors,
+  chains=8,
+  # This causes brms to cache the results
+  file = "f3"
+)
+```
+
+```{r}
+summary(f1)
+```
+
+
+```{r}
+plot(pp_check(f1))
+```
+
+```{r}
+log_priors <- c(
+  prior(normal(log(180), log(20)), coef = "Weight"),
+  prior(normal(log(180), log(7)), coef = "Height"),
+  prior(normal(log(83), log(3)), coef = "Abdomen"),
+  prior(normal(log(83), log(3)), coef = "Chest")
+)
+
+f2 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Weight + Height + Abdomen + Chest,
+  # This specifies the dataset
+  data = data,
+  # This specifies the observation model family
+  family = "lognormal",
+  # This passes the priors specified above to brms
+  prior = log_priors,
+  # This causes brms to cache the results
+  file = "f2"
+)
+```
+
+
+```{r}
+plot(pp_check(f2))
+```
+
+All of the models were implemented with the `brms` package. In the first two models, we used 2000 iterations, 4 chains and a warmup length of 1000. In the third model, however, to obtain better convergence we used 4000 iterations, 8 chains and a warmup length of 2000. For each model, we utilized the priors mentioned before.
+
 
 - brms, rstanarm, or Stan code
 
@@ -131,3 +222,5 @@ The bodyfat dataset was obtained from [Kaggle.com](https://www.kaggle.com/datase
 [^1]: Penrose, K.W., Nelson, A.G. and Fisher, A.G., 1985. Generalized body composition prediction equation for men using simple measurement techniques. Medicine & Science in Sports & Exercise, 17(2), p.189.
 
 [^2]: Brožek, J., Grande, F., Anderson, J.T. and Keys, A., 1963. Densitometric analysis of body composition: revision of some quantitative assumptions. Annals of the New York Academy of Sciences, 110(1), pp.113-140.
+
+[^4]: Stoudt, H. W., Roberts, J., McFarland, R. A., & Damon, A. (1965). Weight, height, and selected body dimensions of adults, United States-1960-1962 (p. 0051). US Department of Health, Education, and Welfare, Public Health Service, Health Resources Administration, National Center for Health Statistics.
