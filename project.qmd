@@ -1,7 +1,7 @@
 ---
 title: "Bayesian Data Analysis Project"
 subtitle: "Body fat"
-author: Veikka Niemi, Anton Aaltio
+author: anonymous
 format:
   html:
     toc: true
@@ -46,6 +46,10 @@ options(brms.file_refit="on_change")
 # Set more readable themes with bigger font for plotting packages
 ggplot2::theme_set(theme_minimal(base_size = 14))
 bayesplot::bayesplot_theme_set(theme_minimal(base_size = 14))
+
+bodydata <- read.csv("bodyfat.csv")
+bodydata <- bodydata[-c(42, 182),]
+
 ```
 
 :::
@@ -55,79 +59,614 @@ bayesplot::bayesplot_theme_set(theme_minimal(base_size = 14))
 
 ## Motivation
 
+Body fat percentage is a quantity that, while seemingly simple, can be difficult to evaluate for the average person. To this end, different methods of measuring the body fat percentage of an individual have been developed. In particular, this project is concerned with utilizing a body fat prediction dataset obtained from Kaggle to predict body fat percentage with for instance age, weight, height and various circumferential measurements of the body. The aim of the project is to construct relatively straightforward predictive models and to develop novel methods to predict bofy fat percentage. Thus we can identify patterns in body composition that may have implications on general health and generate predictions in a cost effective manner.
+
 ## Problem description
 
-Body fat percentage = Proportion of fat tissue in body
+In our problem, a body is assumed to consist of lean tissue or fat tissue. Body fat percentage is simply the proportion of fat tissue in the body.
+While body fat is essential for any human to function, body fat percentage is generally used as a measure of a person’s fitness level. 
 
-Predicting body fat percentage
+Body fat percentage is simply the proportion of fat tissue in the body.
+While body fat is essential for any human to function, body fat percentage is generally used as a measure of a person’s fitness level. To calculate the body fat percentage in the dataset, the body has been assumed to consist entirely of lean body tissue and fat tissue as was done by Siri (1956)[^1]. With estimates for the densities of lean body tissue and fat body tissue given by Katch and McArdle (1977)[^2], we then arrive at the Siri equation for body fat percentage. This equation yields the quantity that we want to predict with the explanatory variables in the dataset.
+
 
 ## Main modeling idea
 
-- In addition showing some illustrative figure is recommended
+We will create three models based on intuitive choices of variables ad investigate the predictive capability of a linear model, non-linear model and hierarchical model. The first model has Age, Weight, Chest and Neck as variables and an intercept term. The second model has variables Age, Chest and Weight^2 and an intercept term. The third hierarchical model has Abdomen and Weight with Height as a group level parameter in addition to the intercept term.
+
+```{r}
+hist(bodydata$BodyFat, breaks = 30)
+```
+
+As we see from the histogram, the body fat is approximately normally distributed and will be treated as such. It is natural to consider the other variables as normally distributed as well. We will use different sources to determine the prior parameters.
+
+In order to evaluate the performance of our models, we will utilize graphical posterior predictive checks, LOO-CV as well as PSIS diagnostics. Additionally a concrete metric for the accuracy of the models are the RMSE values. We will also see how modifying the prior distributions will affect the obtained results.
 
 # Methods
 
 ## Data description
 
-- Provide information where the data was obtained, and if it has been previously used in some online case study and how your analysis differs from the existing analyses
-
-(Hyödyllinen paperi: Roger W. Johnson (1996), "Fitting Percentage of Body Fat to Simple Body Measurements", Journal of Statistics Education.)
-
-The bodyfat dataset has underwater weighted densities and circumference measurements from 10 body parts measured from 252 men as well as age, weight and height measurements. Using these measurements, the dataset also has body fat percentage estimates for the corresponding individuals.
+The bodyfat dataset has underwater weighted densities and circumference measurements from 10 body parts measured from 252 men as well as age, weight and height measurements. Using these measurements, the dataset also has body fat percentage estimates for the corresponding individuals. The columns of the dataset are "Density", "BodyFat", "Age", "Weight", "Height", "Neck", "Chest", "Adbdomen", "Hip", "Thigh", "Knee", "Ankle", "Biceps", "Forearm" and "Wrist". The column "Weight" contains measurements in lbs, "Age" is in years, "Height" is in inches and all of the other columns are circumferential measurements in cm. According to the Roger W. Johnson (1996)[^3], row 42 in the data has the value of height as 29.5 inches with a weight of 205 which is clearly nonsensical and row 182 has a weight of zero. Thus, these rows will be removed from the data used in the modeling.
 
 ```{r}
 data <- read.csv("bodyfat.csv")
+data <- data[-c(42, 182), ]
 head(data, n=3)
 ```
 
-The data is originally from a study by Penrose et al.(1985)[^1]. They body fat percentage is calculated as:
+The data is originally from a study by Penrose et al.(1985)[^4]. The bodyfat dataset was obtained from [Kaggle.com](https://www.kaggle.com/datasets/fedesoriano/body-fat-prediction-dataset/). It is widely available online and can also be downloaded from multiple R packages. Since the dataset is so widely available, many analyses have been done using it. Penrose et al. performed stepwise multiple regression methods to obtain the equation
 
 $$
-\text{Body fat-\%} = \frac{457}{D} - 414.2,
+\text{LBW}=17.298+0.88946\cdot\text{Weight}-0.2783\cdot\text{Age}+0.002617\cdot\text{Age}^2+17.819\cdot\text{Height}-0.6789(\text{Abdomen}-\text{Wrist})
+$$
+where LBW is the lean body weight and the weights are in kg. Through this equation body fat percent can then be calculated. A paired t-test for the difference of the means for the predicted body fat percent and actual body fat percent was performed for a group consisting of 109 men aged 23-74 years and with a body fat percent of 0-47.5%. The difference was shown to be not statistically different from zero at the 0.05 significance level.
+
+Another study was done by Harrell (2018)[^5] where five different OLS linear regression models were fit to the data and the models were compared by the Akaike Information Criterion. The models were `fat ~ rcs(age, 4) + rcs(height, 4) * rcs(abdomen, 4)`, `fat ~ rcs(age, 4) + rcs(log(height), 4) + rcs(log(abdomen)`, `fat ~ rcs(age, 4) + log(height) + log(abdomen)`, `fat ~ age * (log(height) + log(abdomen)` and `fat ~ age + height + abdomen` where `rcs` is used to determine the basis terms for the restricted cubic splines of the data. The third model obtained the lowest AIC and more variables were then added to the model. It was concluded that additional variables were not worthwile to add and the third model yielded a median of the absolute value of residuals as 0.03.
+
+Let $A$ be the proportion of lean body tissue, $B$ the proportion of fat tissue, $a$ the density of lean body tissue (g/cm$^3$), $b$ the density of fat tissue (g/cm$^3$) and $D$ the body density (gm/cm$^3$). Then according to Siri we have the relation
+
+$$
+D = \left(\dfrac{A}{a}+\dfrac{B}{b}\right)^{-1}
 $$
 
-where $D$ is body density. This formula comes from an article by Siri(1956)[^2].
+Hence,
+
+$$
+B = \dfrac{1}{D}\left(\dfrac{ab}{a-b}\right)-\dfrac{b}{a-b}
+$$
+Similarly as Katch and McArdle, we use the estimates $a=1.10$g/cm$^3$ and $b=0.90$g/cm$^3$ to arrive at Siri's equation
+
+$$
+\text{Body fat %}=\dfrac{495}{D}-450
+$$
 
 
+```{r}
+head(bodydata, n=3)
+```
 
+The bodyfat dataset is a highly popular dataset evidenced by many studies and articles utilizing the dataset found online. Perhaps the closest article to our work is a case study by Aki Vehtari (2018)[^6]. This case study was also partially discussed during a lecture, but the focus point of Vehtari's study is in projection predictive variable selection using the `projpred` package. We will not go into such detail about evaluating the variables since the aim of this project is just to create and fit a few different models to the dataset and compare their performance wrt. each other.
 
-The bodyfat dataset was obtained from [Kaggle.com](https://www.kaggle.com/datasets/fedesoriano/body-fat-prediction-dataset/). It is widely available online and can also be downloaded from multiple R packages. Since the dataset is so widely available, many analyses have been done using it. However, most case studies ???.
+Vehtari's case study employs regression models using a regularized horseshoe prior, which helps selecting an effective number of variables to the model. K-Fold cross validation and PSIS-LOO are then used to obtain statistics between the full Bayesian model using all variables from the dataset and a smaller submodel. The submodel is constructed with `projpred` and it consists of two best performing variables, "abdomen" and "weight". The outcome of this analysis indicates that the submodel with just the two variables provides highly accurate predictions about body fat percentage when compared to the full Bayesian model with all 13 variables.
+
+In our project, we will not utilize the `projpred` package so our work doesn't resemble the case study too much. Our variable selection is mostly based on intuition and critical thinking through common sense. It is clear that this way might not produce the best results but we have to make a clear distinction to the case study by Vehtari.
 
 ## Model description
 
-- At least 2 models
+In this project we create three predictive models with `brms` for the body fat percentage. The first model is a linear model where "the body fat percentage "BodyFat" depends on "Age", "Weight", "Chest" and "Neck". Clearly, weight is correlated with body fat percentage as individuals with a higher body fat percent have a higher weight. Age also affects body fat percent as older individuals tend to carry more fat. Additionally, chest and neck are areas of the body where fat visibly accumulates in most obese men. Thus, this set of features seems to be a reasonable model for predicting body fat percent. The second model incorporates non linearity by including "Weight" squared, "Age" and "Chest" as the features. This model includes three key properties for determining body fat percent and investigates the effect of transforming the "Weight" feature. 
 
-- Informative or weakly informative priors, and justification of the choice of these priors
+```{r}
+plot(bodydata$Weight^2, bodydata$BodyFat)
+```
 
-# Results ?
+As we can see, Weight^2 is strongly positively correlated with body fat percentage, which indicates that it could be a promising feature in a model.
 
-- brms, rstanarm, or Stan code
+Notably, all of the models contain an intercept term as well.The third model takes two readily important variables for determining body fat percent, "Abdomen" and "Weight", and creates a group level effect for "Weight" based on "Height". This choice of grouping is due to the fact that weight coupled with the height of an individual yields more information about the body fat percent than height alone. Hence, we have a hierarchical model for body fat percent prediction.
 
-- How the MCMC inference was run, that is, what options were used. A good option is to show the command you ran, and a textual explanation of the choice of options
+Since the original data was published by Brigham Young University in the United States, we can assume that the men in the data are American men. The body fat percentage is assumed to be normally distributed as in general most people have an average body fat percent and large deviations from this are unlikely. The "Age" $A$ can be assumed to vary significantly and be roughly that of a uniform distribution since the age distribution in America, in general, is roughly equal for different age groups. Thus, we will approximate this distribution with a weakly informative prior $A\sim\mathcal{N}(\mu_A,\sigma_{A,est})$. The ages are between 22-81 in the data and hence, without additional information, let us assume that $\mu_A=\dfrac{22+81}{2}=51.5$. Assuming that 99.7% of the ages in the data are within $[\mu_A-3\sigma_A,\mu_A+3\sigma_A]$ we get $\mu_A+3\sigma_A=81\iff\sigma_A=\dfrac{81-51.5}{3}\approx9.8$. To achieve the large standard deviation of $A$, we set $\sigma_{A,est}=10\sigma_A=98$.
 
-- Convergence diagnostics and what can be interpreted from them, **for all models**
-  - Rhat, ESS, divergences
+"Weight" $\mathcal{W}$ is assumed to also follow a normal distribution since most people have an average weight and large deviations from the average are unlikely. According to a National Center For Health Statistics publication [^7] we have that the mean weight for American men aged 18-79 during 1960-1962 was $\mu_\mathcal{W}=168$ pounds and the standard deviation was $\sigma_\mathcal{W}=27.7$ pounds. We can assume that the weight distribution in 1985 was approximately the same. "Chest" $\mathcal{C}$ can be assumed to be normally distributed since most people have an average chest circumference and the proportion of people with a specific chest circumference decreases as you get further away from the mean. According to Schwartz et al.[^8] in 1989, the mean of the chest circumference of 18-30 year old American men was 99cm with a standard deviation of 8.7cm and the mean was 101.6cm with a standard deviation of 6.9cm for 60-85 year old men respectively. Taking the averages of these and converting to inches, we obtain the informative prior $\mathcal{C}\sim\mathcal{N}(\mu_\mathcal{C},\sigma_\mathcal{C})$ where $\mu_\mathcal{C}=39.5$ and $\sigma_\mathcal{C}=3.1$.
+
+For the "Neck" N, we will assume it follows a normal distribution since most people have a neck with an average circumference and large deviations from this are unlikely. Pumill et al. [^9] assert that in 2019 the average neck circumference of 5290 African American males was 38cm and had an IQR of 36.0-41.0. The standard deviation can then be approximated to be twice the width of the IQR to be on the conservative side. Hence, $\mu_N=15$ and $\sigma_N=2$ inches in the informative prior for N.
+
+It is reasonable to assume that "Abdomen" $B$ follows a normal distribution as the circumference of the abdomen of most people is near the average and large fluctuations from the mean are improbable. Ford et al. [^10] state that in 1999-2012 men aged 20 years and older had an average abdomen circumference of $\mu_B=$99.0cm$=39$in with a 95% confidence interval of 97.9-100.2. Then assuming that half of the observations were men, we have a total of $n=0.5\cdot32816=16408$ observations and the standard deviation satisfies $\overline{B}+\dfrac{1.96\sigma_B}{\sqrt{n}}=100.2\iff\sigma_B=\dfrac{\sqrt{16408}(100.2-99)}{1.96}=52.3$cm$=20.6$in. Again, the prior is based on real data and is hence informative. 
+
+# Results
+
+## MCMC Inference
+
+All of the models were implemented with the `brms` package. In the first two models, we used 2000 iterations, 4 chains and a warmup length of 1000. In the third model, however, to obtain better convergence we used 8000 iterations, 8 chains and a warmup length of 4000. For each model, we utilized the priors mentioned before.
+
+### Model 1
+
+```{r, echo=FALSE}
+priors1 <- c(
+  prior(normal(51.5, 98), coef = "Age"),
+  prior(normal(168, 87.7), coef = "Weight"),
+  prior(normal(39.5, 3.1), coef = "Chest"),
+  prior(normal(15,2), coef = "Neck")
+)
+
+f1 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Age + Weight + Chest + Neck,
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = priors1,
+  # This causes brms to cache the results
+  file = "./f1"
+)
+```
+
+
+### Model 2
+
+```{r, echo=FALSE}
+priors2 <- c(
+  prior(normal(51.5, 98), coef = "Age"),
+  prior(normal(168, 87.7), coef = "Weight"),
+  prior(normal(39.5, 3.1), coef = "Chest")
+)
+
+f2 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Age + Chest + Weight^2,
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = priors2,
+  # This causes brms to cache the results
+  file = "./f2"
+)
+```
+
+### Model 3
+
+```{r, echo=FALSE}
+priors3 <- c(
+  prior(normal(39, 20.6), coef = "Abdomen")
+)
+
+f3 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Abdomen + (Weight|Height),
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = priors3,
+  # Number of chains
+  chains = 8,
+  # Number of iterations
+  iter = 8000,
+  # This causes brms to cache the results
+  file = "./f3"
+)
+```
+
+
+## Convergence diagnostics
   
-  - What was done to improve the model if the checks indicated misspecification. **For all models**
+### Model 1
+
+```{r}
+summary(f1)
+```
+
+Observing the `summary` function, we see that the model `f1` has converged sufficiently as $\widehat{R}$ values are approximately one and ESS values are large enough (100 times the number of chains). There were no divergent transitions and max tree depth was not exceeded.
+
+```{r}
+# A function that computes RMSE or LOO-RMSE
+rmse <- function(fit, use_loo=FALSE){
+  mean_y_pred <- if(use_loo){
+    brms::loo_predict(fit)
+  }else{
+    colMeans(brms::posterior_predict(fit)) 
+  }
+  sqrt(mean(
+    (mean_y_pred - brms::get_y(fit))^2
+  ))
+}
+```
+
+```{r}
+round(rmse(f1, use_loo = TRUE), 3)
+round(rmse(f1, use_loo = FALSE), 3)
+```
+
+RMSE values for `f1` are decent. The calculated value using LOO is always higher as it utilizes cross validation and corresponds to out-of-sample predictions as opposed to RMSE without LOO. 
+
+### Model 2
+
+```{r}
+summary(f2)
+```
+
+Again, we see that the model `f2` has converged sufficiently. Namely, $\widehat{R}$ values are approximately one and ESS values are all large enough. There were no divergent transitions and max tree depth was not exceeded.
+
+```{r}
+round(rmse(f2, use_loo = TRUE), 3)
+round(rmse(f2, use_loo = FALSE), 3)
+```
+
+RMSE values are nearly the same as for the first model.
+
+### Model 3
+
+```{r}
+summary(f3)
+```
+
+With the third hierarchical model, we see that some $\widehat{R}$ values are not close enough to one even with the increased chain count and iterations. This happens because group level parameters do not converge since there are few observations for each height. There is also a noticeable amount of divergent transitions with this model. Maximum tree depth was not hit. Furthermore, Bulk_ESS values are less than the recommended amount of 100 times the amount of chains. Tail_ESS values are sufficiently high, except in the family specific parameters. The low Bulk_ESS indicates that the sampling is not efficient within the 5% and 95% quantiles of the posterior distribution.
+
+
+```{r}
+round(rmse(f3, use_loo = TRUE), 3)
+round(rmse(f3, use_loo = FALSE), 3)
+```
+
+
+## Posterior predictive checks
+- Posterior predictive checks and what can be interpreted from them
+  - What was done to improve the model if the checks indicated misspecification, **for all models**
   
-- **Bonus:** Predictive performance assessment if applicable (e.g. classification accuracy) and evaluation of practical usefulness of the accuracy, **for all models**
+### Model 1
 
-- Sensitivity analysis wrt. prior choices, **for all models**
+```{r}
+brms::pp_check(f1)
+```
 
-- Model comparison (LOO-CV)
+The replicated samples from `f1` are similar to the observed data. The observed data also seems to be roughly normally distributed.
 
-# Discussion/ Conclusions ?
+### Model 2
+
+```{r}
+brms::pp_check(f2)
+```
+
+The posterior predictive values from `f2` do not differ significantly from `f1`.
+
+### Model 3
+
+```{r}
+brms::pp_check(f3)
+```
+
+$y_{rep}$ from `f3` are again similar to previous results and the observed data.
+
+All our models had RMSE values of around 5. This means that the models can predict somewhat accurately if a person has a very high or very low level of body fat, but for men with intermediate levels of body fat, it can produce inaccurate results.
+
+## Sensitivity analysis
+
+Thus far most of the priors have been based on real data and have hence been informative. Now we will test how robust the posterior predictions are when the priors are made weakly informative. That is, we will multiply the standard deviations by 5 to increase the variation in the priors. Additionally, we will look at how the posterior predictions change if the means of the priors are multiplied by 2 while keeping the standard deviations untouched.
+
+### Model 1 - Bigger deviation
+
+```{r, echo=FALSE}
+altprior1 <- c(
+  prior(normal(51.5, 98*5), coef = "Age"),
+  prior(normal(168, 27.7*5), coef = "Weight"),
+  prior(normal(39.5, 3.1*5), coef = "Chest"),
+  prior(normal(15, 2*5), coef = "Neck")
+)
+
+f11 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Age + Weight + Chest + Neck,
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = altprior1,
+  # This causes brms to cache the results
+  file = "./f11"
+)
+```
+
+```{r}
+summary(f11)
+```
+
+Modifying the standard deviations of `f1` do not affect the convergence, as $\widehat{R}$ values are all close to 1.00. ESS values are large enough. There were no divergent transitions and max tree depth was not exceeded.
+
+```{r}
+round(rmse(f11, use_loo = TRUE), digits = 3)
+round(rmse(f11, use_loo = FALSE), digits = 3)
+```
+
+RMSE values have not changed significantly but are slightly less than with the base model.
+
+```{r}
+brms::pp_check(f11)
+```
+
+`pp_check` from the modified model do not differ visibly from the earlier `pp_check` with `f1`.
+ 
+### Model 1 - Bigger mean
+
+```{r, echo=FALSE}
+altprior12 <- c(
+  prior(normal(51.5*2, 98), coef = "Age"),
+  prior(normal(168*2, 27.7), coef = "Weight"),
+  prior(normal(39.5*2, 3.1), coef = "Chest"),
+  prior(normal(15*2, 2), coef = "Neck")
+)
+
+f12 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Age + Weight + Chest + Neck,
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = altprior12,
+  # This causes brms to cache the results
+  file = "./f12"
+)
+```
+
+```{r}
+summary(f12)
+```
+
+Convergence statistics are again satisfactory. $\widehat{R}$ values are all close to 1.00. ESS values are large enough. There were no divergent transitions and max tree depth was not exceeded.
+
+```{r}
+round(rmse(f12, use_loo = TRUE), 3)
+round(rmse(f12, use_loo = FALSE), 3)
+```
+
+RMSE values are approximately the same but slightly higher. This indicates that the first model `f1` is not sensitive to prior modifications, at least when using normal distributions.
+
+```{r}
+brms::pp_check(f12)
+```
+
+Similarly as before, no visible changes in the posterior predictions.
+
+### Model 2 - Bigger deviation
+
+```{r, echo=FALSE}
+altprior2 <- c(
+  prior(normal(51.5, 98*5), coef = "Age"),
+  prior(normal(168, 27.7*5), coef = "Weight"),
+  prior(normal(39.5, 3.1*5), coef = "Chest")
+)
+
+f22 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Age + Chest + Weight^2,
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = altprior2,
+  # This causes brms to cache the results
+  file = "./f22"
+)
+```
+
+```{r}
+summary(f22)
+```
+
+$\widehat{R}$ values are all close to 1.00. ESS values are large enough. There were no divergent transitions and max tree depth was not exceeded.
+
+```{r}
+round(rmse(f22, use_loo = TRUE), 3)
+round(rmse(f22, use_loo = FALSE), 3)
+```
+
+```{r}
+brms::pp_check(f22)
+```
+
+Modifying the prior standard deviations of `f2` does not significantly change the posterior distribution.
+
+### Model 2 - Bigger mean
+
+```{r}
+altprior21 <- c(
+  prior(normal(51.5*2, 98), coef = "Age"),
+  prior(normal(168*2, 27.7), coef = "Weight"),
+  prior(normal(39.5*2, 3.1), coef = "Chest")
+)
+
+f221 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Age + Chest + Weight^2,
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = altprior21,
+  # This causes brms to cache the results
+  file = "./f221"
+)
+```
+
+```{r}
+summary(f221)
+```
+
+$\widehat{R}$ values are all close to 1.00. ESS values are large enough. There were no divergent transitions and max tree depth was not exceeded.
+
+```{r}
+round(rmse(f221, use_loo = TRUE), 3)
+round(rmse(f221, use_loo = FALSE), 3)
+```
+
+```{r}
+brms::pp_check(f221)
+```
+
+Again, modifying prior means does not meaningfully alter the posterior predictions.
+
+### Model 3 - Bigger deviation
+
+```{r, echo=FALSE}
+altprior3 <- c(
+  prior(normal(39, 20.6*5), coef = "Abdomen")
+)
+
+f33 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Abdomen + (Weight|Height),
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = altprior3,
+  # Number of chains
+  chains = 8,
+  # Number of iterations
+  iter = 8000,
+  # This causes brms to cache the results
+  file = "./f33"
+)
+```
+
+```{r}
+summary(f33)
+```
+
+Some $\widehat{R}$ values are not close enough to one even with the increased chain count and iterations. There is also a noticeable amount of divergent transitions with this model. Maximum tree depth was not hit. Furthermore, Bulk_ESS values are satisfactory except for group level effects. Tail_ESS values are sufficiently high, except in the group level effects. Thus the sampling does not efficiently include the group or population level effects anywhere in the posterior distribution.
+
+```{r}
+round(rmse(f33, use_loo = TRUE), 3)
+round(rmse(f33, use_loo = FALSE), 3)
+```
+
+```{r}
+brms::pp_check(f33)
+```
+
+Based on these results, there are no visible changes to `f3` after modifying the prior standard deviations.
+
+### Model 3 - Bigger mean
+
+```{r, echo=FALSE}
+altprior31 <- c(
+  prior(normal(39*2, 20.6), coef = "Abdomen")
+)
+
+f331 <- brms::brm(
+  # This specifies the formula
+  BodyFat ~ 1 + Abdomen + (Weight|Height),
+  # This specifies the dataset
+  data = bodydata,
+  # This specifies the observation model family
+  family = gaussian,
+  # This passes the priors specified above to brms
+  prior = altprior31,
+  # Number of chains
+  chains = 8,
+  # Number of iterations
+  iter = 8000,
+  # This causes brms to cache the results
+  file = "./f331"
+)
+```
+
+```{r}
+summary(f331)
+```
+
+Some $\widehat{R}$ values are again not close enough to one. There is also a noticeable amount of divergent transitions with this model. Maximum tree depth was not hit. Furthermore, Bulk_ESS values are not satisfactory except for family specific parameters. Tail_ESS values are not sufficiently high, except for the family specific parameters. Thus the sampling does not efficiently include the group or population level effects anywhere in the posterior distribution.
+
+```{r}
+round(rmse(f331, use_loo = TRUE), 3)
+round(rmse(f331, use_loo = FALSE), 3)
+```
+
+```{r}
+brms::pp_check(f331)
+```
+
+Finally, after modifying the prior means of `f3`, we see that the posterior predictions have not significantly changed.
+
+Thus we conclude that none of the models are not sensitive to prior distribution changes, at least for normally distributed priors.
+
+## LOO-CV model comparison
+
+We will now run LOO-CV (Leave-One-Out Cross Validation) for all three models.
+
+### Model 1
+
+```{r}
+plot(loo(f1), label_points=TRUE)
+loo1 <- loo(f1)
+
+loo1
+```
+
+Pareto $\hat{k}$ values for the first model are all satisfactory as all values are under 0.5, which means all of the components of `elpd_loo` are accurately estimated.
+
+### Model 2
+
+```{r}
+plot(loo(f2), label_points=TRUE)
+loo2 <- loo(f2)
+
+loo2
+```
+
+For the model `f2`, all $\hat{k}$ values are again under 0.5, indicating an accurate estimation of `elpd_loo`.
+
+### Model 3
+
+```{r}
+plot(loo(f3), label_points=TRUE)
+loo3 <- loo(f3)
+
+loo3
+```
+
+The final model, `f3`, produces some high Pareto $\hat{k}$ values. Generally, this is more common for hierarchical models and in our case the small number of height-wise observations affect the accuracy of the group level parameters. Since we have $\hat{k}$ values of over 0.7, we can inspect the `p_loo` estimate. A `p_loo` value of 23.7 indicates that the model could be misspecified.
+
+
+### Model comparison
+
+```{r}
+loo_compare(loo1, loo2, loo3)
+```
+
+Standard errors of the models' `elpd_loo` values are 10.1, 9.9 and 11.0 for the first, second and third model, respectively. Hence the third model is the best one with low uncertainty as the `elpd_diff` values are around 4 times greater than SE values.
+
+# Discussion and Conclusions
 
 - Discussion of issues and potential improvements
-
 - Conclusion what was learned from the data analysis
+
+In this project, we constructed three different novel models attempting to predict body fat percentages of adult males based on various circumference measurements. The aim was to find new and simple yet effective ways of estimating body fat levels. The dataset was based on a study by Penrose et al.(1985) and obtained from Kaggle.com.
+
+The models were created using the `brms` package. The first model was a linear model with parameters Chest, Age, Weight and Neck and an intercept term. The second model was a non-linear model with Age, Chest, Weight^2 parameters and an intercept term. The third model was a hierarchical model with Weight with Height as a group level parameter, Abdomen and an intercept term.
+
+All of the priors were based on intuitive approximations, which in this case meant normal distributions, and the parameters were obtained from various studies. The priors chosen were hence informative except the prior for Age.
+
+All three models produced adequate posterior predictions when considering the graphical posterior predictive checks, PSIS diagnostic and RMSE values. The third model however produced a few $\hat{k}$ values which could be taken into account in further examination. The third model also indicated some potential convergence issues which were not present with the other models. All models seemed to be insensitive to prior parameter changes when for example increasing the standard deviations five-fold or the mean two-fold. The third model was chosen as the best one based on `loo_compare` results.
+
+Better model performance could have been achieved by doing variable selection with for example the `projpred` package or with forward or backward selection. This was however not in our immediate interest due to the case studies made with the dataset. Other possible way to improve the model would have been to test for example the t-distribution as the prior distribution for some of the variables. The prior sensitivity analysis could also be conducted for different prior distributions to ensure the robustness of the final model. As it stands, the issues were the convergence and high $\hat{k}$ values appearing for the third model. This could be remedied with even more informative priors.
+
+In conclusion, we learned that predicting body fat percentages can be done somewhat accurately even with a few different measurements as our models did not use or need that many parameters. We also learned about incorporating non-linear models with `brms`, which was not done in the course assignments.
 
 # Self reflection
 
-- What did the group learn while making the project
+During this project, we gained an all-encompassing understanding of the full Bayesian workflow. We now have many ideas on how to apply and gain insights from Bayesian data analysis on other interesting real world datasets. We also learned about finding resources for constructing informative priors. Also, we experienced the difficulties and challenges that can arise when comparing models on multiple different metrics.
 
-# Footnotes/ References
+# References
 
-[^1]: Penrose, K.W., Nelson, A.G. and Fisher, A.G., 1985. Generalized body composition prediction equation for men using simple measurement techniques. Medicine & Science in Sports & Exercise, 17(2), p.189.
+[^1]: Siri, W.E., 1956. The gross composition of the body. In Advances in biological and medical physics (Vol. 4, pp. 239-280). Elsevier.
 
-[^2]: Siri, W.E., 1956. The gross composition of the body. In Advances in biological and medical physics (Vol. 4, pp. 239-280). Elsevier.
+[^2]: Katch, F. I., & McArdle, W. D. (1977). Nutrition, weight control, and exercise.
+
+[^3]: Johnson, R. W. (1996). Fitting percentage of body fat to simple body measurements. Journal of Statistics Education, 4(1).
+
+[^4]: Penrose, K. W., Nelson, A. G., & Fisher, A. G. (1985). Generalized body composition prediction equation for men using simple measurement techniques. Medicine & Science in Sports & Exercise, 17(2), 189.
+
+[^5]: Harrell, F. E. (2017). Regression modeling strategies. Bios, 330(2018), 14.
+
+[^6]: https://users.aalto.fi/~ave/modelselection/bodyfat.html
+
+[^7]: Roberts, Jean (1966). Weight by height and age of adults, United States-1960-1962. 
+
+[^8]: Schwartz, R. S., Shuman, W. P., Bradbury, V. L., Cain, K. C., Fellingham, G. W., Beard, J. C., ... & Abrass, I. B. (1990). Body fat distribution in healthy young and older men. Journal of Gerontology, 45(6), M181-M185.
+
+[^9]: Pumill, C. A., Bush, C. G., Greiner, M. A., Hall, M. E., Dunlay, S. M., Correa, A., ... & Mentz, R. J. (2019). Neck circumference and cardiovascular outcomes: insights from the Jackson Heart Study. American heart journal, 212, 72-79.
+
+[^10]: Ford, E. S., Maynard, L. M., & Li, C. (2014). Trends in mean waist circumference and abdominal obesity among US adults, 1999-2012. Jama, 312(11), 1151-1153.
+
+# Appendix
+
+
